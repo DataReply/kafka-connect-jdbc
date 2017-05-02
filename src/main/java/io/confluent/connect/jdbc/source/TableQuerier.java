@@ -35,24 +35,28 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     QUERY // User-specified query
   }
 
-  protected final QueryMode mode;
-  protected final String schemaPattern;
-  protected final String name;
-  protected final String query;
-  protected final String topicPrefix;
+  public final QueryMode mode;
+  public final String schemaPattern;
+  public final String name;
+  public final String query;
+  public final String topicPrefix;
 
   // Mutable state
-  protected long lastUpdate;
-  protected PreparedStatement stmt;
-  protected ResultSet resultSet;
-  protected Schema schema;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix, String schemaPattern) {
+  public final boolean mapNumerics;
+  public long lastUpdate;
+  public PreparedStatement stmt;
+  public ResultSet resultSet;
+  public Schema schema;
+
+  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix,
+                      String schemaPattern, boolean mapNumerics) {
     this.mode = mode;
     this.schemaPattern = schemaPattern;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
+    this.mapNumerics = mapNumerics;
     this.lastUpdate = 0;
   }
 
@@ -78,7 +82,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData());
+      schema = DataConverter.convertSchema(name, resultSet.getMetaData(), mapNumerics);
     }
   }
 

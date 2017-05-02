@@ -24,18 +24,17 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.JdbcUtils;
+
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.Calendar;
 import java.util.Collections;
-import java.util.GregorianCalendar;
 import java.util.Map;
-import java.util.TimeZone;
-
-import io.confluent.connect.jdbc.util.JdbcUtils;
 
 /**
  * <p>
@@ -57,27 +56,31 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
 public class TimestampIncrementingTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(TimestampIncrementingTableQuerier.class);
 
-  private static final Calendar UTC_CALENDAR = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
   private static final BigDecimal LONG_MAX_VALUE_AS_BIGDEC = new BigDecimal(Long.MAX_VALUE);
 
   private String timestampColumn;
   private String incrementingColumn;
   private long timestampDelay;
+  private Long maxRows;
+  private String tableNameMaxRows;
   private TimestampIncrementingOffset offset;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern) {
-    super(mode, name, topicPrefix, schemaPattern);
+                                           String schemaPattern, boolean mapNumerics, Long maxRows, String tableNameMaxRows) {
+    super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.maxRows = maxRows;
+    this.tableNameMaxRows=tableNameMaxRows;
   }
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
+    log.info("**** createPreparedStatement");
     // Default when unspecified uses an autoincrementing column
     if (incrementingColumn != null && incrementingColumn.isEmpty()) {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
@@ -129,12 +132,40 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" ASC");
     } else if (incrementingColumn != null) {
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" > ?");
-      builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" ASC");
+      if(maxRows!=null && maxRows > 0)
+      {
+        //"SELECT ID  FROM V_BIGDATA_DOCUMENT WHERE ID IN ( SELECT ID  FROM ( SELECT ID FROM V_BIGDATA_DOCUMENT WHERE ID>0 ORDER BY ID ASC ) WHERE  ROWNUM<10 )
+        builder.append(" WHERE ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" IN ( SELECT ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" FROM ( SELECT ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        //builder.append(", ROW_NUMBER() OVER() AS ROWNUM  FROM  ");  // DERBY
+        builder.append("  FROM  ");
+        builder.append(JdbcUtils.quoteString(tableNameMaxRows , quoteString));
+
+        builder.append(" WHERE ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" > ?");
+        builder.append(" ORDER BY ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        //builder.append(" ASC ) AS TMP1 "); //DERBY
+        builder.append(" ASC ) ");
+        builder.append(" WHERE ROWNUM <= ");
+        builder.append(maxRows );
+        builder.append(" ) ");
+      }
+      else
+      {
+        builder.append(" WHERE ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" > ?");
+        builder.append(" ORDER BY ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" ASC");
+      }
+
     } else if (timestampColumn != null) {
       builder.append(" WHERE ");
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
@@ -145,43 +176,48 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(" ASC");
     }
     String queryString = builder.toString();
-    log.debug("{} prepared SQL query: {}", this, queryString);
+    log.info("**** prepared: {} ", this);
+    log.info("**** SQL query: {}", queryString);
+
     stmt = db.prepareStatement(queryString);
   }
+
+
 
   @Override
   protected ResultSet executeQuery() throws SQLException {
     if (incrementingColumn != null && timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       Long incOffset = offset.getIncrementingOffset();
-      Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), UTC_CALENDAR).getTime() - timestampDelay);
-      stmt.setTimestamp(1, endTime, UTC_CALENDAR);
-      stmt.setTimestamp(2, tsOffset, UTC_CALENDAR);
+      Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
+      stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setLong(3, incOffset);
-      stmt.setTimestamp(4, tsOffset, UTC_CALENDAR);
-      log.debug("Executing prepared statement with start time value = {} end time = {} and incrementing value = {}",
-              JdbcUtils.formatUTC(tsOffset),
-              JdbcUtils.formatUTC(endTime),
+      stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      log.info("Executing prepared statement with start time value = {} end time = {} and incrementing value = {}",
+              DateTimeUtils.formatUtcTimestamp(tsOffset),
+              DateTimeUtils.formatUtcTimestamp(endTime),
               incOffset);
     } else if (incrementingColumn != null) {
       Long incOffset = offset.getIncrementingOffset();
       stmt.setLong(1, incOffset);
-      log.debug("Executing prepared statement with incrementing value = {}", incOffset);
+      log.info("Executing prepared statement with incrementing value = {}", incOffset);
     } else if (timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
-      Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), UTC_CALENDAR).getTime() - timestampDelay);
-      stmt.setTimestamp(1, tsOffset, UTC_CALENDAR);
-      stmt.setTimestamp(2, endTime, UTC_CALENDAR);
-      log.debug("Executing prepared statement with timestamp value = {} end time = {}",
-              JdbcUtils.formatUTC(tsOffset),
-              JdbcUtils.formatUTC(endTime));
+      Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
+      stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      log.info("Executing prepared statement with timestamp value = {} end time = {}",
+              DateTimeUtils.formatUtcTimestamp(tsOffset),
+              DateTimeUtils.formatUtcTimestamp(endTime));
     }
-    return stmt.executeQuery();
+    ResultSet  res = stmt.executeQuery();
+    return res;
   }
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet);
+    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
     offset = extractOffset(schema, record);
     // TODO: Key?
     final String topic;
@@ -193,7 +229,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         break;
       case QUERY:
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                             JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
+                JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
         topic = topicPrefix;
         break;
       default:
@@ -203,7 +239,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   }
 
   // Visible for testing
-  TimestampIncrementingOffset extractOffset(Schema schema, Struct record) {
+  public TimestampIncrementingOffset extractOffset(Schema schema, Struct record) {
     final Timestamp extractedTimestamp;
     if (timestampColumn != null) {
       extractedTimestamp = (Timestamp) record.get(timestampColumn);
@@ -247,19 +283,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   private boolean isIntegralPrimitiveType(Object incrementingColumnValue) {
     return incrementingColumnValue instanceof Long
-           || incrementingColumnValue instanceof Integer
-           || incrementingColumnValue instanceof Short
-           || incrementingColumnValue instanceof Byte;
+            || incrementingColumnValue instanceof Integer
+            || incrementingColumnValue instanceof Short
+            || incrementingColumnValue instanceof Byte;
   }
 
   @Override
   public String toString() {
     return "TimestampIncrementingTableQuerier{" +
-           "name='" + name + '\'' +
-           ", query='" + query + '\'' +
-           ", topicPrefix='" + topicPrefix + '\'' +
-           ", timestampColumn='" + timestampColumn + '\'' +
-           ", incrementingColumn='" + incrementingColumn + '\'' +
-           '}';
+            "name='" + name + '\'' +
+            ", query='" + query + '\'' +
+            ", topicPrefix='" + topicPrefix + '\'' +
+            ", timestampColumn='" + timestampColumn + '\'' +
+            ", incrementingColumn='" + incrementingColumn + '\'' +
+            '}';
   }
 }
