@@ -30,7 +30,6 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collections;
@@ -75,7 +74,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
     this.maxRows = maxRows;
-    this.tableNameMaxRows=tableNameMaxRows;
+    this.tableNameMaxRows = tableNameMaxRows;
   }
 
   @Override
@@ -132,8 +131,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" ASC");
     } else if (incrementingColumn != null) {
-      if(maxRows!=null && maxRows > 0)
-      {
+      if (maxRows != null && maxRows > 0) {
         //"SELECT ID  FROM V_BIGDATA_DOCUMENT WHERE ID IN ( SELECT ID  FROM ( SELECT ID FROM V_BIGDATA_DOCUMENT WHERE ID>0 ORDER BY ID ASC ) WHERE  ROWNUM<10 )
         builder.append(" WHERE ");
         builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
@@ -143,8 +141,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
         //builder.append(", ROW_NUMBER() OVER() AS ROWNUM  FROM  ");  // DERBY
         builder.append("  FROM  ");
-        builder.append(JdbcUtils.quoteString(tableNameMaxRows , quoteString));
-
+        builder.append(JdbcUtils.quoteString(tableNameMaxRows, quoteString));
         builder.append(" WHERE ");
         builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
         builder.append(" > ?");
@@ -153,11 +150,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         //builder.append(" ASC ) AS TMP1 "); //DERBY
         builder.append(" ASC ) ");
         builder.append(" WHERE ROWNUM <= ");
-        builder.append(maxRows );
+        builder.append(maxRows);
         builder.append(" ) ");
-      }
-      else
-      {
+      } else {
         builder.append(" WHERE ");
         builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
         builder.append(" > ?");
