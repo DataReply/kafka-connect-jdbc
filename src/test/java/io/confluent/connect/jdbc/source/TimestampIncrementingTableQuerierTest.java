@@ -16,18 +16,21 @@
 
 package io.confluent.connect.jdbc.source;
 
+import static org.junit.Assert.assertEquals;
+
+import java.math.BigDecimal;
+import java.sql.SQLException;
+import java.util.Collections;
+
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
+import io.confluent.connect.jdbc.source.*;
 
-import java.math.BigDecimal;
-import java.sql.SQLException;
-import java.util.Collections;
-
-import static org.junit.Assert.assertEquals;
+import io.confluent.connect.jdbc.source.TimestampIncrementingTableQuerier;
 
 public class TimestampIncrementingTableQuerierTest {
 
@@ -70,7 +73,7 @@ public class TimestampIncrementingTableQuerierTest {
   }
 
   private TimestampIncrementingTableQuerier newQuerier() {
-    return new TimestampIncrementingTableQuerier(TableQuerier.QueryMode.TABLE, null, "", null, "id", Collections.<String, Object>emptyMap(), 0L, null);
+    return new TimestampIncrementingTableQuerier(TableQuerier.QueryMode.TABLE, null, "", null, "id", Collections.<String, Object>emptyMap(), 0L, null, false, null, null);
   }
 
 }
