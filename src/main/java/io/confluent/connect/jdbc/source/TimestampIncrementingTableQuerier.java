@@ -79,7 +79,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
-    log.info("**** createPreparedStatement");
+//    log.info("**** createPreparedStatement");
     // Default when unspecified uses an autoincrementing column
     if (incrementingColumn != null && incrementingColumn.isEmpty()) {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
@@ -174,8 +174,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(" ASC");
     }
     String queryString = builder.toString();
-    log.info("**** prepared: {} ", this);
-    log.info("**** SQL query: {}", queryString);
+//    log.info("**** prepared: {} ", this);
+//    log.info("**** SQL query: {}", queryString);
 
     stmt = db.prepareStatement(queryString);
   }
