@@ -152,6 +152,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         builder.append(" WHERE ROWNUM <= ");
         builder.append(maxRows);
         builder.append(" ) ");
+        builder.append(" ORDER BY ");
+        builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+        builder.append(" ASC");
       } else {
         builder.append(" WHERE ");
         builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
