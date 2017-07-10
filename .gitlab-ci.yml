@@ -3,35 +3,18 @@ stages:
   - test
   - package
 
-build_latest:
-  when: manual
-  stage: package
-  only:
-    - master
-  before_script:
-    - mkdir -p /root/.m2 && echo """<settings><proxies><proxy><id>http-proxy</id><active>true</active><protocol>http</protocol><host>$proxy_url</host><port>$proxy_port</port></proxy><proxy><id>https-proxy</id><active>true</active><protocol>https</protocol><host>$proxy_url</host><port>$proxy_port</port></proxy></proxies></settings>""" >> /root/.m2/settings.xml
-  script:
-    - cd $CI_PROJECT_DIR
-    - mvn package -DskipTests=true
-    - cp -R "$CI_PROJECT_DIR/target/$PROJECT_NAME-*-package/share/java/$PROJECT_NAME" "$CI_PROJECT_DIR/$PROJECT_NAME-latest"
-  artifacts:
-    name: "$PROJECT_NAME-latest"
-    # available at REPO_URL/builds/artifacts/master/download?job=build_latest
-    paths:
-      - "$CI_PROJECT_DIR/$PROJECT_NAME-latest"
-    expire_in: '4 weeks'
-
 build_release:
   stage: package
+  except:
+    - master
   only:
     - tags
-    - ["3.1.x", "3.2.x"]
   before_script:
     - mkdir -p /root/.m2 && echo """<settings><proxies><proxy><id>http-proxy</id><active>true</active><protocol>http</protocol><host>$proxy_url</host><port>$proxy_port</port></proxy><proxy><id>https-proxy</id><active>true</active><protocol>https</protocol><host>$proxy_url</host><port>$proxy_port</port></proxy></proxies></settings>""" >> /root/.m2/settings.xml
   script:
     - cd $CI_PROJECT_DIR
     - mvn package -DskipTests=true
-    - cp -R "$CI_PROJECT_DIR/target/$PROJECT_NAME-*-package/share/java/$PROJECT_NAME" "$CI_PROJECT_DIR/$PROJECT_NAME-$CI_COMMIT_TAG"
+    - cp -R $CI_PROJECT_DIR/target/$PROJECT_NAME-*-package/share/java/$PROJECT_NAME "$CI_PROJECT_DIR/$PROJECT_NAME-$CI_COMMIT_TAG"
   artifacts:
     name: "$PROJECT_NAME-$CI_COMMIT_TAG"
     # available at REPO_URL/builds/artifacts/<CI_COMMIT_TAG>/download?job=build_release
